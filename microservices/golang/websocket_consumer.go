@@ -6,6 +6,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+
+	"github.com/gorilla/websocket"
 )
 
 const keyRitoque = "cHJva2FydGluZ3JpdG9xdWU6ODdkNmQ0OTgtZjY5NS00NzEyLWFmZjMtY2ZlYjJiNzU3YWQ1"
@@ -22,6 +24,11 @@ type WebsocketInfo struct {
 	ServerWsPort   int    `json:"liveServerWsPort"`
 	ServerWssPort  int    `json:"liveServerWssPort"`
 	ServerHttpPort int    `json:"liveServerHttpPort"`
+}
+
+var upgrader = websocket.Upgrader{
+	ReadBufferSize:  1024,
+	WriteBufferSize: 1024,
 }
 
 // getConnectionInfo fetches the connection info from BMI Services.
@@ -91,9 +98,28 @@ func getWebsocketInfo(connectionInfo ConnectionInfo) WebsocketInfo {
 	return websocketInfo
 }
 
-func readWebsocketData(websocketInfo WebsocketInfo) {
-	// connect to the websocket
+func websocketHandler(w http.ResponseWriter, r *http.Request, websocketInfo WebsocketInfo) {
+	// upgrade the http connection to a websocket connection
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer conn.Close()
 
+	// send START command to the websocket
+	err = conn.WriteMessage(websocket.TextMessage, []byte("START "+websocketInfo.ServerKey))
+
+	for {
+		// read the message from the websocket
+		messageType, p, err := conn.ReadMessage()
+		if err != nil {
+			log.Println(err)
+			return
+		}
+
+		// print the message to the console
+		log.Printf("Received %s: %s", messageType, string(p))
+	}
 }
 
 func main() {
@@ -107,4 +133,8 @@ func main() {
 
 	logger.Println("ServerKey: ", connectionInfo.ClientKey)
 	logger.Println("ServerHost: ", websocketInfo.ServerHost)
+
+    // connect to remote websocket server
+    http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+
 }
